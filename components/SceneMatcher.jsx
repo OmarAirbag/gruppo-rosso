@@ -81,6 +81,7 @@ export default function SceneMatcher() {
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState('loading');
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -363,28 +364,39 @@ export default function SceneMatcher() {
     saveData(slots, history, skippedDates, newScenes);
   };
 
+  const deleteHistoryEntry = (entryToDelete) => {
+    const newHistory = history.filter(h => 
+      !(h.date === entryToDelete.date && 
+        h.person1 === entryToDelete.person1 && 
+        h.person2 === entryToDelete.person2 && 
+        h.scene === entryToDelete.scene &&
+        h.confirmedAt === entryToDelete.confirmedAt)
+    );
+    setHistory(newHistory);
+    saveData(slots, newHistory, skippedDates);
+  };
+
   const clearAllData = async () => {
-    if (window.confirm('Sei sicuro di voler cancellare TUTTI i dati? Questa azione non può essere annullata.')) {
-      setSlots({});
-      setHistory([]);
-      setSkippedDates([]);
-      setScenes(DEFAULT_SCENES);
-      setSelectedPerson(null);
-      
-      try {
-        await supabase
-          .from('scene_matcher_data')
-          .update({
-            slots: {},
-            history: [],
-            skipped_dates: [],
-            scenes: DEFAULT_SCENES,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', DATA_ID);
-      } catch (e) {
-        console.error('Error clearing:', e);
-      }
+    setShowDeleteConfirm(false);
+    setSlots({});
+    setHistory([]);
+    setSkippedDates([]);
+    setScenes(DEFAULT_SCENES);
+    setSelectedPerson(null);
+    
+    try {
+      await supabase
+        .from('scene_matcher_data')
+        .update({
+          slots: {},
+          history: [],
+          skipped_dates: [],
+          scenes: DEFAULT_SCENES,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', DATA_ID);
+    } catch (e) {
+      console.error('Error clearing:', e);
     }
   };
 
@@ -584,13 +596,26 @@ export default function SceneMatcher() {
                   <h3 className="font-medium text-gray-700 mb-2">{formatDate(date)}</h3>
                   <div className="space-y-2">
                     {entries.map((entry, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-sm">
-                        <span className="bg-red-100 text-red-700 px-2 py-1 rounded">
-                          Scena {entry.scene}
-                        </span>
-                        <span>{entry.person1}</span>
-                        <span className="text-gray-400">+</span>
-                        <span>{entry.person2}</span>
+                      <div key={idx} className="flex items-center justify-between gap-2 text-sm bg-white p-2 rounded-lg">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="bg-red-100 text-red-700 px-2 py-1 rounded">
+                            Scena {entry.scene}
+                          </span>
+                          <span>{entry.person1}</span>
+                          <span className="text-gray-400">+</span>
+                          <span>{entry.person2}</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Eliminare la scena ${entry.scene} con ${entry.person1} + ${entry.person2}?\n\nLo slot tornerà disponibile per la riassegnazione.`)) {
+                              deleteHistoryEntry(entry);
+                            }
+                          }}
+                          className="text-gray-400 hover:text-red-500 transition-colors p-1 flex-shrink-0"
+                          title="Elimina e riabilita slot"
+                        >
+                          ✏️
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -660,7 +685,7 @@ export default function SceneMatcher() {
                 📊 Storico
               </button>
               <button
-                onClick={clearAllData}
+                onClick={() => setShowDeleteConfirm(true)}
                 className="px-4 py-2 rounded-lg font-medium bg-red-100 text-red-600 hover:bg-red-200"
               >
                 🗑️
@@ -724,6 +749,40 @@ export default function SceneMatcher() {
                 
                 <div className="mt-4 pt-4 border-t text-xs text-gray-500">
                   💡 Puoi eliminare solo le scene non ancora utilizzate nello storico
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Delete Confirmation Modal */}
+          {showDeleteConfirm && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-3xl">⚠️</span>
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-800 mb-2">Conferma Reset</h2>
+                  <p className="text-gray-600 mb-6">
+                    Sei sicuro di voler cancellare <strong>TUTTI</strong> i dati?
+                    <br />
+                    <span className="text-red-500 text-sm">Questa azione non può essere annullata!</span>
+                  </p>
+                  
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-all"
+                    >
+                      ✕ Annulla
+                    </button>
+                    <button
+                      onClick={clearAllData}
+                      className="flex-1 px-4 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-all"
+                    >
+                      🗑️ Elimina tutto
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
